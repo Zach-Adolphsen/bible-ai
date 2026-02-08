@@ -123,17 +123,29 @@ async def get_translation_verse(translation: str, book: str, chapter: int, verse
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    book_verse = session.exec(select(Verse).where(Verse.book_id == book.id).where(Verse.chapter_num == chapter).where(Verse.verse_num == verse)).one()
+    book_verse = session.exec(
+        select(Verse)
+        .where(Verse.translation_id == translation.id)
+        .where(Verse.book_id == book.id)
+        .where(Verse.chapter_num == chapter)
+        .where(Verse.verse_num == verse)
+    ).first()
+
     if not book_verse:
         raise HTTPException(status_code=404, detail="Verse not found")
 
     merged_dict = {
         "translation": translation,
         "book": book,
-        "chapter": {
-            "chapter_num": chapter,
-            "verse": book_verse
-        }
+        "chapter": {}
     }
+
+    chapter_num: int = book_verse.chapter_num
+    if chapter_num not in merged_dict["chapter"]:
+        merged_dict["chapter"][chapter_num] = []
+    merged_dict["chapter"][chapter_num].append({
+            "verse_number": book_verse.verse_num,
+            "verse_text": book_verse.verse_text
+    })
 
     return merged_dict
