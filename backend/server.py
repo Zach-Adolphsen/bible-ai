@@ -4,34 +4,15 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlmodel import Session, create_engine
+
+from services.sql_service import get_book, get_translation, get_verse, get_verses
+from services.sql_model import Translation
 
 load_dotenv()
 db_url = os.getenv("NEON_DB_URL")
 engine = create_engine(db_url)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-class Translation(SQLModel, table=True):
-    __tablename__ = "translations"
-    id : int | None = Field(default=None, primary_key=True)
-    translation_shortname: str | None = Field(default=None)
-    year_written_in: int | None = Field(default=None)
-    translation_type: str | None = Field(default=None)
-
-class Book(SQLModel, table=True):
-    __tablename__ = "books"
-    id: int | None = Field(default=None, primary_key=True)
-    book_name: str | None = Field(default=None)
-    testament: str | None = Field(default=None)
-
-class Verse(SQLModel, table=True):
-    __tablename__ = "verses"
-    id: int | None = Field(default=None, primary_key=True)
-    book_id: int | None = Field(default=None, foreign_key="books.id")
-    translation_id: int | None = Field(default=None, foreign_key="translations.id")
-    chapter_num: int | None = Field(default=None)
-    verse_num: int | None = Field(default=None)
-    verse_text: str | None = Field(default=None)
 
 def create_db_and_tables():
     db = SessionLocal()
@@ -57,9 +38,9 @@ async def root():
     return {"Health": "OK"}
 
 @app.get("/bible/{translation}")
-async def get_translation(translation: str, session: SessionDep) -> Translation:
-    statement = select(Translation).where(Translation.translation_shortname == translation)
-    translation = session.exec(statement).first()
+async def api_get_translation(translation: str, session: SessionDep) -> Translation:
+    translation = get_translation(translation, session=session)
+
     if not translation:
         raise HTTPException(status_code=404, detail="Translation not found")
 
@@ -67,13 +48,12 @@ async def get_translation(translation: str, session: SessionDep) -> Translation:
 
 @app.get("/bible/{translation}/{book}")
 async def get_translation_book(translation: str, book: str, session: SessionDep):
-    statement = select(Translation).where(Translation.translation_shortname == translation)
-    translation = session.exec(statement).first()
+
+    translation = get_translation(translation, session=session)
     if not translation:
         raise HTTPException(status_code=404, detail="Translation not found")
 
-    statement = select(Book).where(Book.book_name == book)
-    book = session.exec(statement).first()
+    book = get_book(book, session=session)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -82,18 +62,15 @@ async def get_translation_book(translation: str, book: str, session: SessionDep)
 @app.get("/bible/{translation}/{book}/{chapter:int}")
 async def get_translation_book_chapter(translation: str, book: str, chapter: int, session: SessionDep):
 
-    statement = select(Translation).where(Translation.translation_shortname == translation)
-    translation = session.exec(statement).first()
+    translation = get_translation(translation, session=session)
     if not translation:
         raise HTTPException(status_code=404, detail="Translation not found")
 
-    statement = select(Book).where(Book.book_name == book)
-    book = session.exec(statement).first()
+    book = get_book(book, session=session)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    statement = select(Verse).where(Verse.book_id == book.id).where(Verse.chapter_num == chapter).order_by(Verse.verse_num)
-    book_verses = session.exec(statement).all()
+    book_verses = get_verses(translation, book, chapter, session=session)
     if not book_verses:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
@@ -116,24 +93,16 @@ async def get_translation_book_chapter(translation: str, book: str, chapter: int
 
 @app.get("/bible/{translation}/{book}/{chapter:int}/{verse:int}")
 async def get_translation_verse(translation: str, book: str, chapter: int, verse: int, session: SessionDep):
-    statement = select(Translation).where(Translation.translation_shortname == translation)
-    translation = session.exec(statement).first()
+
+    translation = get_translation(translation, session=session)
     if not translation:
         raise HTTPException(status_code=404, detail="Translation not found")
 
-    statement = select(Book).where(Book.book_name == book)
-    book = session.exec(statement).first()
+    book = get_book(book, session=session)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    book_verse = session.exec(
-        select(Verse)
-        .where(Verse.translation_id == translation.id)
-        .where(Verse.book_id == book.id)
-        .where(Verse.chapter_num == chapter)
-        .where(Verse.verse_num == verse)
-    ).first()
-
+    book_verse = get_verse(translation, book, chapter, verse, session=session)
     if not book_verse:
         raise HTTPException(status_code=404, detail="Verse not found")
 
