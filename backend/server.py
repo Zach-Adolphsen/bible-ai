@@ -1,10 +1,13 @@
+from dotenv import load_dotenv
+import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
-db_url = "postgresql://neondb_owner:npg_jJUQf4qEGC7a@ep-polished-river-ahlioq3p-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+load_dotenv()
+db_url = os.getenv("NEON_DB_URL")
 engine = create_engine(db_url)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
