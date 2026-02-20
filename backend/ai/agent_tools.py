@@ -1,13 +1,12 @@
 import logging
-import time
 from typing import Any
 
 from langchain_core.tools import tool
 from sqlmodel import Session
 
+from backend.ai.schema import ScriptureQuery
 from backend.db_session import engine
 from backend.services.sql_service import get_translation, get_book, get_verse, get_verses, list_translations
-from .schema import ScriptureQuery
 
 logger = logging.getLogger("backend.ai.tools.agent_tools")
 
@@ -32,7 +31,6 @@ def _norm_shortname(s: Any) -> str:
 
 @tool(description="List the Bible translations that are available in the database (shortnames like KJV, BSB).")
 def available_translations() -> str:
-    started = time.perf_counter()
     logger.info("tool_called available_translations")
     try:
         with Session(engine) as session:
@@ -51,92 +49,35 @@ def available_translations() -> str:
         raise
 
 
-# @tool(description="Look up a Bible verse by reference (e.g., John 3:16)")
-# def verse_lookup(reference: str) -> str:
-#     logger.info("tool_called verse_lookup reference=%s", _preview(reference))
-#     try:
-#         result = f"Lookup result for {reference}"
-#         logger.info(
-#             "tool_return verse_lookup result = %s",
-#             _preview(result),
-#         )
-#         return result
-#     except Exception:
-#         logger.exception("tool_error verse_lookup reference=%s", _preview(reference))
-#         raise
-
-
 @tool(description="Search for semantically relevant Bible verses.")
 def semantic_search(query: str) -> str:
-    logger.info("tool_called semantic_search query=%s", _preview(query))
     try:
         result = f"Semantic search results for: {query}"
-        logger.info(
-            "tool_return semantic_search result = %s",
-            result,
-        )
         return result
     except Exception:
         logger.exception("tool_error semantic_search query=%s", _preview(query))
         raise
 
 
-# @tool(description="Expand a verse reference to include surrounding verses.")
-# def expand_context(reference: str) -> str:
-#     logger.info("tool_called expand_context reference=%s", _preview(reference))
-#     try:
-#         result = f"Expanded context for {reference}"
-#         logger.info(
-#             "tool_return expand_context result = %s",
-#             _preview(result),
-#         )
-#         return result
-#     except Exception:
-#         logger.exception("tool_error expand_context reference=%s", _preview(reference))
-#         raise
-
-
-@tool(description="Look up scripture verses by translation, book, chapter, and verse number in the database. Only returns verses that exist in the DB.")
+@tool(
+    description="Look up scripture verses by translation, book, chapter, and verse number in the database. Returns raw verse text only."
+)
 def scripture_lookup(query: ScriptureQuery) -> str:
-    requested_shortname = _norm_shortname(getattr(query, "translation", None))
 
-    logger.info(
-        "tool_called scripture_lookup translation=%s book=%s chapter=%s verse=%s",
-        _preview(requested_shortname),
-        _preview(getattr(query, "book", None)),
-        _preview(getattr(query, "chapter", None)),
-        _preview(getattr(query, "verse", None)),
-    )
+    query_translation = _norm_shortname(query.translation)
 
     try:
         with Session(engine) as session:
-            # Enforce "DB only": if requested translation isn't present, refuse and provide valid options.
-            translation = get_translation(requested_shortname, session)
+
+            translation = get_translation(query_translation, session)
             if not translation:
-                translations = list_translations(session)
-                shortnames = sorted(
-                    {t.translation_shortname for t in translations if getattr(t, "translation_shortname", None)}
-                )
-                result = (
-                    f"Translation '{requested_shortname}' is not available in the database. "
-                    f"Available translations: {', '.join(shortnames) if shortnames else '(none)'}. "
-                    f"Please choose one of the available translations."
-                )
-                logger.info(
-                    "tool_return scripture_lookup result = %s",
-                    _preview(result),
-                )
-                return result
+                return "Translation not found."
 
             book = get_book(query.book, session)
             if not book:
-                result = f"Book '{query.book}' not found."
-                logger.info(
-                    "tool_return scripture_lookup result = %s",
-                    _preview(result),
-                )
-                return result
+                return "Book not found."
 
+            # Single verse
             if query.verse is not None:
                 verse = get_verse(
                     translation,
@@ -145,24 +86,13 @@ def scripture_lookup(query: ScriptureQuery) -> str:
                     query.verse,
                     session
                 )
+
                 if not verse:
-                    result = "Verse not found."
-                    logger.info(
-                        "tool_return scripture_lookup result = %s",
-                        _preview(result),
-                    )
-                    return result
+                    return "Verse not found."
 
-                result = (
-                    f"{book.book_name} {query.chapter}:{query.verse} ({translation.translation_shortname})\n"
-                    f"{verse.text}"
-                )
-                logger.info(
-                    "tool_return scripture_lookup result = %s",
-                    _preview(result),
-                )
-                return result
+                return verse.verse_text
 
+            # Entire chapter
             verses = get_verses(
                 translation,
                 book,
@@ -171,25 +101,17 @@ def scripture_lookup(query: ScriptureQuery) -> str:
             )
 
             if not verses:
-                result = "Chapter not found."
-                logger.info(
-                    "tool_return scripture_lookup result=%s",
-                    _preview(result),
-                )
-                return result
+                return "Chapter not found."
 
-            result = "\n".join(
+            return "\n".join(
                 f"({translation.translation_shortname}) {book.book_name} {v.chapter_num}:{v.verse_num}. {v.text}"
                 for v in verses
             )
-            logger.info(
-                "tool_return scripture_lookup result_len=%d",
-                len(result),
-            )
-            return result
+
     except Exception:
-        logger.exception("tool_error scripture_lookup query=%s", _preview(query))
+        logger.exception("tool_error scripture_lookup")
         raise
 
 
 agent_tools = [available_translations, semantic_search, scripture_lookup]
+
