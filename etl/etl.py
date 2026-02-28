@@ -3,80 +3,13 @@ import pandas as pd
 import psycopg2
 import requests
 import re
-from flask.cli import load_dotenv
+from dotenv import load_dotenv
 from psycopg2.extras import execute_values
+from sentence_transformers import SentenceTransformer
 
 BASE_URL: str = "https://bible.helloao.org/api"
-TRANSLATION_ID: str = "BSB"
+TRANSLATION_ID: str = "eng_kjv"
 
-# BOOK_ABBREVIATIONS = {
-#     "Genesis": "GEN",
-#     "Exodus": "EXO",
-#     "Leviticus": "LEV",
-#     "Numbers": "NUM",
-#     "Deuteronomy": "DEU",
-#     "Joshua": "JOS",
-#     "Judges": "JDG",
-#     "Ruth": "RUT",
-#     "1 Samuel": "1SA",
-#     "2 Samuel": "2SA",
-#     "1 Kings": "1KI",
-#     "2 Kings": "2KI",
-#     "1 Chronicles": "1CH",
-#     "2 Chronicles": "2CH",
-#     "Ezra": "EZR",
-#     "Nehemiah": "NEH",
-#     "Esther": "EST",
-#     "Job": "JOB",
-#     "Psalms": "PSA",
-#     "Proverbs": "PRO",
-#     "Ecclesiastes": "ECC",
-#     "Song of Solomon": "SNG",
-#     "Isaiah": "ISA",
-#     "Jeremiah": "JER",
-#     "Lamentations": "LAM",
-#     "Ezekiel": "EZK",
-#     "Daniel": "DAN",
-#     "Hosea": "HOS",
-#     "Joel": "JOL",
-#     "Amos": "AMO",
-#     "Obadiah": "OBA",
-#     "Jonah": "JON",
-#     "Micah": "MIC",
-#     "Nahum": "NAM",
-#     "Habakkuk": "HAB",
-#     "Zephaniah": "ZEP",
-#     "Haggai": "HAG",
-#     "Zechariah": "ZEC",
-#     "Malachi": "MAL",
-#     "Matthew": "MAT",
-#     "Mark": "MRK",
-#     "Luke": "LUK",
-#     "John": "JHN",
-#     "Acts": "ACT",
-#     "Romans": "ROM",
-#     "1 Corinthians": "1CO",
-#     "2 Corinthians": "2CO",
-#     "Galatians": "GAL",
-#     "Ephesians": "EPH",
-#     "Philippians": "PHP",
-#     "Colossians": "COL",
-#     "1 Thessalonians": "1TH",
-#     "2 Thessalonians": "2TH",
-#     "1 Timothy": "1TI",
-#     "2 Timothy": "2TI",
-#     "Titus": "TIT",
-#     "Philemon": "PHM",
-#     "Hebrews": "HEB",
-#     "James": "JAS",
-#     "1 Peter": "1PE",
-#     "2 Peter": "2PE",
-#     "1 John": "1JN",
-#     "2 John": "2JN",
-#     "3 John": "3JN",
-#     "Jude": "JUD",
-#     "Revelation": "REV"
-# }
 
 def call_complete_api(translation: str = TRANSLATION_ID):
     url = f"{BASE_URL}/{translation}/complete.json"
@@ -141,8 +74,22 @@ def clean_data(df):
     df["book"] = df["book"].str.strip().astype(str)
     df["chapter_num"] = df["chapter_num"].astype(int)
     df["verse_num"] = df["verse_num"].astype(int)
-    df["verse_text"] = df["verse_text"].str.replace(r'[\n\r\t\f\v]+', ' ', regex=True).str.replace(r'\s+', ' ', regex=True).str.strip().astype(str)
+    df["verse_text"] = (df["verse_text"]
+                        .str.replace(r'[\n\r\t\f\v]+', ' ', regex=True)
+                        .str.replace(r'\s+', ' ', regex=True)
+                        .str.replace(r'([,.;:!?])\s*', r'\1 ', regex=True)
+                        .str.strip()
+                        .astype(str)
+                        )
     df["translation"] = df["translation"].str.strip().astype(str)
+
+def generate_embeddings(df):
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    texts = df["verse_text"].astype(str).tolist()
+    embeddings = model.encode(texts, show_progress_bar=True)
+
+    df["verse_embedding"] = embeddings.tolist()
 
 def insert_data_to_db(df):
     try:
@@ -179,12 +126,13 @@ def insert_data_to_db(df):
                     int(row["chapter_num"]),
                     row["verse_num"],
                     row["verse_text"],
-                    int(translation_id)
+                    int(translation_id),
+                    row["verse_embedding"]
                 )
                     for _, row in df.iterrows()
                 ]
                 execute_values(cur,
-                               "INSERT INTO verses (book_id, chapter_num, verse_num, verse_text, translation_id) VALUES %s",
+                               "INSERT INTO verses (book_id, chapter_num, verse_num, verse_text, translation_id, verse_embedding) VALUES %s",
                                row_data
                 )
 
@@ -217,5 +165,7 @@ if __name__ == "__main__":
     clean_data(pd_data)
     print(f"# of null entries per column (should all be 0):\n{pd_data.isnull().sum()}\n")
     print(f"Data Types:\n{pd_data.dtypes}")
+
+    generate_embeddings(pd_data)
 
     insert_data_to_db(pd_data)
