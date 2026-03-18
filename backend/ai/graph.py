@@ -6,10 +6,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from backend.ai.agent_tools import agent_tools
+from .agent_tools import agent_tools
 
 # One LLM call per request, then (optionally) tools, then END.
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.1, max_tokens=1000)
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7, max_tokens=1000)
 model_with_tools = model.bind_tools(agent_tools)
 tool_node = ToolNode(agent_tools)
 

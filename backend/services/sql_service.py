@@ -2,7 +2,31 @@ from typing import Any, Sequence
 
 from sqlmodel import select, Session
 
-from .sql_model import Translation, Book, Verse
+from sqlalchemy import text as sql_text
+from ..schemas.models import Translation, Book, Verse
+
+
+def get_semantic_similar_verses(embedding_list: list[float], session: Session, limit: int = 3) -> Sequence[Any]:
+    sql = sql_text(
+        """
+        SELECT t.translation_shortname,
+               b.book_name,
+               v.chapter_num,
+               v.verse_num,
+               v.verse_text
+        FROM verses AS v
+                 JOIN translations AS t
+                      ON v.translation_id = t.id
+                 JOIN books AS b
+                      ON v.book_id = b.id
+        WHERE t.translation_shortname = 'BSB'
+        ORDER BY v.verse_embedding <=> CAST(:embedding AS vector)
+        LIMIT :limit
+        OFFSET 1;
+        """
+    ).bindparams(embedding=str(embedding_list), limit=limit)
+
+    return session.exec(sql).fetchall()
 
 
 def get_translation(translation_shortname: str, session) -> Translation | None:

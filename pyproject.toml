@@ -1,0 +1,22 @@
+[project]
+name = "bible-io"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlmodel",
+    "langchain_core",
+    "typing",
+    "sqlalchemy",
+    "logging",
+    "pydantic",
+    "langchain_google_genai",
+    "langgraph",
+    "sentence_transformers",
+    "psycopg2",
+    "pgvector",
+    "sentence_transformers"
+]
