@@ -12,8 +12,8 @@ class Translation(SQLModel, table=True):
 class Book(SQLModel, table=True):
     __tablename__ = "books"
     id: int | None = Field(default=None, primary_key=True)
-    book_name: str | None = Field(default=None)
-    testament: str | None = Field(default=None)
+    name: str | None = Field(default=None)
+    # testament: str | None = Field(default=None)
 
 
 class Verse(SQLModel, table=True):

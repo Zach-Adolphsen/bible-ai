@@ -78,13 +78,13 @@ def scripture_lookup_from_db(parsed: ScriptureQuery, session: Session) -> str:
         v = get_verse(translation, book, chapter, verse, session=session)
         if not v:
             raise HTTPException(status_code=404, detail="Verse not found")
-        return f"{book.book_name} {chapter}:{verse} ({translation.translation_shortname})\n{v.verse_text}"
+        return f"{book.name} {chapter}:{verse} ({translation.translation_shortname})\n{v.verse_text}"
 
     verses = get_verses(translation, book, chapter, session=session)
     if not verses:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
     return "\n".join(
-        f"{book.book_name} {vv.chapter_num}:{vv.verse_num} ({translation.translation_shortname}) {vv.verse_text}"
+        f"{book.name} {vv.chapter_num}:{vv.verse_num} ({translation.translation_shortname}) {vv.verse_text}"
         for vv in verses
     )
