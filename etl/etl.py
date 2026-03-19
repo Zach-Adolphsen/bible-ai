@@ -19,21 +19,23 @@ def call_complete_api(translation: str = TRANSLATION_ID):
     return data.json()
 
 def get_verse_text(verse):
-    text = ""
+    parts = []
 
     # Search through all content items to find text elements
     for content in verse["content"]:
         if isinstance(content, str):
-            text += content
+            parts.append(content.strip())
         elif isinstance(content, dict):
             if "text" in content:
-                text += content["text"]
+                parts.append(content["text"].strip())
+                
+    text = " ".join(parts)
 
     if isinstance(text, str):
         # Remove all line breaks, tabs, and other whitespace characters
         text = re.sub(r'[\n\r\t\f\v]', ' ', text)
         # Keep only letters, numbers, spaces, and basic punctuation
-        text = re.sub(r'[^a-zA-Z0-9\s.,;:!?\'"()-]', '', text)
+        text = re.sub(r'[^a-zA-Z0-9\s.,;:!?\'"()\-—–]', '', text)
         # Replace multiple spaces with single-space
         text = re.sub(r'\s+', ' ', text)
         # Trim whitespace from beginning and end
@@ -77,10 +79,12 @@ def clean_data(df):
     df["verse_text"] = (df["verse_text"]
                         .str.replace(r'[\n\r\t\f\v]+', ' ', regex=True)
                         .str.replace(r'\s+', ' ', regex=True)
-                        .str.replace(r'([,.;:!?])\s*', r'\1 ', regex=True)
+                        .str.replace(r'([,.;:!?])\s*', r'\1 ', regex=True)  # space after punctuation
+                        .str.replace(r'\s*—\s*', '—', regex=True)           # no spaces around em dash
+                        .str.replace(r'\s*–\s*', '–', regex=True)           # no spaces around en dash
                         .str.strip()
                         .astype(str)
-                        )
+                    )
     df["translation"] = df["translation"].str.strip().astype(str)
 
 def generate_embeddings(df):
@@ -106,14 +110,14 @@ def insert_data_to_db(df):
 
                 book_names = df["book"].unique()
                 for book_name in book_names:
-                    cur.execute("SELECT id FROM books WHERE book_name = %s", (book_name,))
+                    cur.execute("SELECT id FROM books WHERE name = %s", (book_name,))
                     result = cur.fetchone()
                     if result is None:
                         print(f"Adding missing book to database: {book_name}")
-                        cur.execute("INSERT INTO books (book_name) VALUES (%s) RETURNING id", (book_name,))
+                        cur.execute("INSERT INTO books (name) VALUES (%s) RETURNING id", (book_name,))
                         conn.commit()
 
-                execute_values(cur, "SELECT id, book_name FROM books WHERE book_name IN %s", (book_names,))
+                execute_values(cur, "SELECT id, name FROM books WHERE name IN %s", (book_names,))
                 book_mapping = {book_name: book_id for book_id, book_name in cur.fetchall()}
 
                 df["book_id"] = df["book"].map(book_mapping)
@@ -149,7 +153,7 @@ def insert_translation(conn, translation: str = TRANSLATION_ID.strip()):
 
         if not check_entry:
             print(f"Adding new translation: {translation}")
-            cur.execute("INSERT INTO translations (translation_shortname, translation_type) VALUES (%s, %s) RETURNING id", (translation, "mixed"))
+            cur.execute("INSERT INTO translations (translation_shortname) VALUES (%s) RETURNING id", (translation,))
             translation_id = cur.fetchone()[0]
             return translation_id
         else:
