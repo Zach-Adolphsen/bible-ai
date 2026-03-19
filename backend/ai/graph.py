@@ -1,15 +1,14 @@
 from typing import Sequence, Annotated, TypedDict
 
 from langchain_core.messages import BaseMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from .agent_tools import agent_tools
+from .model import model
 
 # One LLM call per request, then (optionally) tools, then END.
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7, max_tokens=1000)
 model_with_tools = model.bind_tools(agent_tools)
 tool_node = ToolNode(agent_tools)
 

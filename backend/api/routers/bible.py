@@ -55,7 +55,7 @@ async def get_translation_book_chapter(translation: str, book: str, chapter: int
     }
 
     for verse in book_verses:
-        chapter_num: int = verse.chapter_num
+        chapter_num: int | None = verse.chapter_num
         if chapter_num not in merged_dict["chapter"]:
             merged_dict["chapter"][chapter_num] = []
         merged_dict["chapter"][chapter_num].append({
@@ -86,7 +86,7 @@ async def get_translation_verse(translation: str, book: str, chapter: int, verse
         "chapter": {}
     }
 
-    chapter_num: int = book_verse.chapter_num
+    chapter_num: int | None = book_verse.chapter_num
     if chapter_num not in merged_dict["chapter"]:
         merged_dict["chapter"][chapter_num] = []
     merged_dict["chapter"][chapter_num].append({
